@@ -21,6 +21,7 @@ The source code includes the actual implementation of the different appraoches, 
 **Unloading datasets from Greenplum to filesystem and type-casting**: `src/{run_unload_criteo.sh, run_unload_imagenet.sh, etl_imagenet.py, etl_criteo.py}`
 #### Experiment scripts
 **End-to-end tests**:
+
 ```
 src/
 	run_imagenet.sh #MA, Imagenet
@@ -43,6 +44,6 @@ src/
 `src/plots/plots.ipynb`
 
 #### Experiment logs
-All past run logs generated during our experiments can be downloaded at [Google Drive Link]()(15.3GB). Use these files and the plotter files you can re-produce all the test figures in the paper.
+All past run logs generated during our experiments can be downloaded at [Google Drive Link](https://drive.google.com/file/d/12HxEOhEntq7wLgGQqs1_C2pG5uUraRUS/view?usp=sharing)(15.3GB). Extract them in to `logs` directory. Use these files and the plotter files you can re-produce all the test figures in the paper.
 
 
