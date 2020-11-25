@@ -24,7 +24,7 @@ The source code includes the actual implementation of the different appraoches, 
 
 ```
 src/
-	run_imagenet.sh #MA, Imagenet
+  run_imagenet.sh #MA, Imagenet
   run_mop.sh #UDAF, Imagenet
   run_ctq.sh #CTQ, Imagenet
   run_da_cerebro_standalone.sh #DA, Imagenet
@@ -36,7 +36,7 @@ src/
 **Drill-down tests**:
 ```
 src/
-	run_scalability.sh #Scalability tests
+  run_scalability.sh #Scalability tests
   hetro_simluator.ipynb #Heterogenous workloads simulations
   run_imagenet_model_size.sh #Model size tests
 ```
