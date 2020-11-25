@@ -2,7 +2,7 @@
 This is repo is for code release of our paper *Distributed Deep Learning on Data Systems: A Comparative Analysis of Approaches* for the sake of reproducibility. In the paper we developed four different approaches (Cerebro-Spark, UDAF, CTQ, and DA) of bringing deep learning to DBMS-resident data. We showed analyses and experiments to study the trade-offs of these approaches. This repo contains the data, source code, original log files, and other artifacts such as the plotting code. These are required to re-produce the results we presented in the paper.
 
 ### Prerequists
-We used [Greenplum Database](https://greenplum.org/) and [Apache Spark](https://spark.apache.org/). [Cerebros](https://github.com/ADALabUCSD/cerebro-system) is also needed. To run the experiments you will also need a GPU-enabled cluster with at least 150 GB RAM avaliable on each node. 
+We used [Greenplum Database](https://greenplum.org/) and [Apache Spark](https://spark.apache.org/). [Cerebro](https://github.com/ADALabUCSD/cerebro-system) is also needed. To run the experiments you will also need a GPU-enabled cluster (we used 8 nodes) with at least 150 GB RAM available on each node. 
 
 ### Data
 
