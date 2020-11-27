@@ -45,7 +45,7 @@ src/
   run_imagenet_model_size.sh #Model size tests
 ```
 ### Plotters
-`src/plots/plots.ipynb`
+`plots/plots.ipynb`
 
 ### Experiment logs
 All past run logs generated during our experiments can be downloaded at [Google Drive Link](https://drive.google.com/file/d/12HxEOhEntq7wLgGQqs1_C2pG5uUraRUS/view?usp=sharing)(15.3GB). Extract them in to `logs` directory. Use these files and the plotter files you can re-produce all the test figures in the paper.
