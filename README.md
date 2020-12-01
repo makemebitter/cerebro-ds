@@ -47,7 +47,12 @@ src/
 ### Plotters
 `plots/plots.ipynb`
 
+### Loggers
+- **CPU logger**: logs/cpu_logger.sh
+- **GPU logger**: logs/gpu_logger.sh
+
 ### Experiment logs
 All past run logs generated during our experiments can be downloaded at [Google Drive Link](https://drive.google.com/file/d/12HxEOhEntq7wLgGQqs1_C2pG5uUraRUS/view?usp=sharing)(15.3GB). Extract them in to `logs` directory. Use these files and the plotter files you can re-produce all the test figures in the paper.
+
 
 
