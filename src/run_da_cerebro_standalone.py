@@ -12,21 +12,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-
 from __future__ import division
 from __future__ import print_function
-from cerebro_gpdb.pathmagic import * # noqa
+from cerebro_gpdb.pathmagic import *  # noqa
 from cerebro_gpdb.utils import cats
 from cerebro_gpdb.da import DirectAccessClient
 from cerebro_gpdb.da import input_fn
 from cerebro_gpdb.run_cerebro_standalone_helper import model_fn
 from cerebro_gpdb.run_cerebro_standalone_helper import train_fn
 from cerebro_gpdb.run_cerebro_standalone_helper import mst_eval_fn
+from cerebro_gpdb.run_cerebro_standalone_helper import mst_eval_fn_hyperopt
+from cerebro_gpdb.hyperopt_helper import init_hyperopt
 from cerebro_gpdb.utils import logs
-from in_rdbms_helper import main_prepare
+from cerebro_gpdb.in_rdbms_helper import main_prepare
 from cerebro.code.client import schedule
 import os
-import dill
+from cerebro_gpdb.imagenetcat import param_grid_hyperopt
+
 
 class generator_df:
     def __init__(self, df_actual_data):
@@ -54,8 +56,7 @@ class generator_df:
                 yield image_arr, label
 
 
-if __name__ == '__main__':
-    args, msts = main_prepare(shuffle=False)
+def main(args, msts):
     print("HELLO")
     if args.run:
         logs("START RUNNING")
@@ -70,26 +71,57 @@ if __name__ == '__main__':
         da = DirectAccessClient(
             cats, args.db_name, args.train_name, args.valid_name, args.size)
         data_cat, sys_cats = da.generate_cats()
-        
         workers = da.get_workers()
         # for sanitys check
         # data_cat['train'] = data_cat['valid']
 
-        print (data_cat)
+        print(data_cat)
         data_cat = {DATASET_NAME: data_cat}
-        schedule(
-            data_set_name=DATASET_NAME,
-            input_fn=input_fn,
-            model_fn=model_fn(generator_df),
-            train_fn=train_fn,
-            initial_msts=msts,
-            mst_eval_fn=mst_eval_fn(args.num_epochs),
-            ckpt_root=args.models_root,
-            preload_data_to_mem=True,
-            log_files_root=args.logs_root,
-            backend='keras',
-            data_catalog=data_cat,
-            workers=workers
-        )
+        if args.hyperopt:
+            hyperopt_params, msts, trials, domain, rand, model_options = \
+                init_hyperopt(param_grid_hyperopt, args)
+
+            schedule(
+                data_set_name=DATASET_NAME,
+                input_fn=input_fn,
+                model_fn=model_fn(generator_df),
+                train_fn=train_fn,
+                initial_msts=msts,
+                mst_eval_fn=mst_eval_fn_hyperopt(args.num_epochs,
+                                                 hyperopt_params,
+                                                 trials,
+                                                 domain,
+                                                 args.max_num_config,
+                                                 rand,
+                                                 args.size,
+                                                 model_options),
+                ckpt_root=args.models_root,
+                preload_data_to_mem=True,
+                log_files_root=args.logs_root,
+                backend='keras',
+                data_catalog=data_cat,
+                workers=workers
+            )
+
+        else:
+            schedule(
+                data_set_name=DATASET_NAME,
+                input_fn=input_fn,
+                model_fn=model_fn(generator_df),
+                train_fn=train_fn,
+                initial_msts=msts,
+                mst_eval_fn=mst_eval_fn(args.num_epochs),
+                ckpt_root=args.models_root,
+                preload_data_to_mem=True,
+                log_files_root=args.logs_root,
+                backend='keras',
+                data_catalog=data_cat,
+                workers=workers
+            )
 
         logs("END RUNNING")
+
+
+if __name__ == '__main__':
+    args, msts = main_prepare(shuffle=False)
+    main(args, msts)

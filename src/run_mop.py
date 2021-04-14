@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-
 from in_rdbms_helper import params_fac
 from in_rdbms_helper import main_prepare
 from in_rdbms_helper import mst_2_str
@@ -92,6 +91,7 @@ class ImageNetMOPRunner(object):
                 ]
             );
             TRUNCATE TABLE {mstt};
+            alter table {mstt} DROP CONSTRAINT mst_table_model_id_key;
             """.format(**locals())
         )
         wait(self.connection)
@@ -115,7 +115,7 @@ class ImageNetMOPRunner(object):
 
 
 if __name__ == "__main__":
-    args, msts = main_prepare(shuffle=False)
+    args, msts = main_prepare(shuffle=True)
     print(args.train_name, args.valid_name)
     runner = ImageNetMOPRunner(cats, msts, args.num_epochs,
                                args.train_name, args.valid_name, no_gpu=args.criteo)

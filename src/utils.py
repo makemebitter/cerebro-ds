@@ -1,19 +1,30 @@
+# Copyright 2020 Yuhao Zhang and Arun Kumar. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
 import datetime
 import psycopg2
-from madlib_keras_wrapper import serialize_nd_weights
 import select
 import random
 import time
 import json
-import keras
 import os
 import pandas as pd
 import sys
 import numpy as np
-from keras import backend as K
-import tensorflow as tf
-from imagenetcat import SEED
-
+from cerebro_gpdb.madlib_keras_wrapper import serialize_nd_weights
+from cerebro_gpdb.imagenetcat import SEED
+DEBUG = True
 MINIBATCH_OUTPUT_DEPENDENT_COLNAME_DL = "dependent_var"
 MINIBATCH_OUTPUT_INDEPENDENT_COLNAME_DL = "independent_var"
 DISTRIBUTION_KEY_COLNAME = "__dist_key__"
@@ -26,18 +37,119 @@ GP_SEGMENT_ID_COLNAME = "gp_segment_id"
 CUDA_VISIBLE_DEVICES_KEY = 'CUDA_VISIBLE_DEVICES'
 
 
+class LOG_KEYS(object):
+    DATA_LOADING = 'DATA LOADING'
+    TRAINING = 'TRAINING'
+    VALIDATING = 'VALIDATING'
+    MODEL_INIT = 'MODEL INITIALIZING'
+    MODEL_TRAINVALID = 'MODEL TRAIN/VALID'
+
+
+def get_output_names_hyperopt(timestamp):
+    output = 't_{timestamp}_udaf_hyperopt'.format(**locals())
+    output_info = output + '_info'
+    output_summary = output + '_summary'
+    output_mst_table = output + '_mst_table'
+    output_mst_table_summary = output + '_mst_table_summary'
+    return output, output_info, \
+        output_summary, output_mst_table, output_mst_table_summary
+
+
+def mst2key(mst):
+    """
+    Utility function to generate a unique identifier for a MST
+    :param mst:
+    :return:
+    """
+    string_id = ""
+    keys = list(mst.keys())
+    keys.sort()
+    for k in keys:
+        v = mst[k]
+        string_id = string_id + k + ":" + str(v) + "|"
+
+    string_id = string_id[0:-1]
+    return string_id.replace(" ", "_")
+
+
+def key2mst(key):
+    mst = {}
+    for x in key.split('|'):
+        name, value = x.split(':')
+        if name == 'batch_size':
+            value = int(value)
+        elif name == 'model':
+            value = value
+        else:
+            value = float(value)
+        mst[name] = value
+    return mst
+
+
 def tstamp():
     return datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
 def logs(message):
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    print("{}: {}".format(message, timestamp))
+    printed = "{}: {}".format(message, timestamp)
+    print(printed)
     sys.stdout.flush()
+    return printed
 
 
+def DiskLogs(filenames):
+    def logs_disk(message):
+        printed = logs(message)
+        for filename in filenames:
+            with open(filename, 'a') as f:
+                f.write(printed + '\n')
+    return logs_disk
 
-def set_seed(SEED=SEED):
+
+def timeit_factory(debug=DEBUG):
+    def timeit(func):
+        def timed(*args, **kwargs):
+            function_name = func.__name__
+            if debug:
+                logs("Start inside {}".format(function_name))
+            result = func(*args, **kwargs)
+            if debug:
+                logs("End inside {}".format(function_name))
+            return result
+        return timed
+    return timeit
+
+
+class logsc(object):
+    def __init__(self,
+                 log, debug=DEBUG, logs_fn=logs, elapsed_time=False, log_dict={}):
+        self.log = log
+        self.debug = debug
+        self.logs_fn = logs_fn
+        self.elapsed_time = elapsed_time
+        self.log_dict = log_dict
+
+    def __enter__(self):
+        self.start = datetime.datetime.now()
+        if self.debug:
+            self.logs_fn("Start {}".format(self.log))
+
+    def __exit__(self, type, value, traceback):
+        self.end = datetime.datetime.now()
+        if self.debug:
+            self.logs_fn("End {}".format(self.log))
+        if self.elapsed_time:
+            elapsed = (self.end - self.start).total_seconds()
+            print(
+                "ELAPSED TIME: {}".format(
+                    elapsed
+                )
+            )
+            self.log_dict[self.log] = elapsed
+
+
+def set_seed(SEED=SEED, backend='tf'):
     # Seed value
     # Apparently you may use different seed values at each stage
 
@@ -54,20 +166,39 @@ def set_seed(SEED=SEED):
     np.random.seed(SEED)
 
     # 4. Set the `tensorflow` pseudo-random generator at a fixed value
+    if backend == 'tf':
+        import keras
+        from keras import backend as K
+        import tensorflow as tf
+        try:
+            tf.random.set_random_seed(SEED)
+        # for later versions:
+        except:
+            tf.compat.v1.set_random_seed(seed_value)
 
-    tf.random.set_random_seed(SEED)
-    # for later versions:
-    # tf.compat.v1.set_random_seed(seed_value)
-
-    # 5. Configure a new global `tensorflow` session
-    session_conf = tf.ConfigProto(
-        intra_op_parallelism_threads=1, inter_op_parallelism_threads=1)
-    sess = tf.Session(graph=tf.get_default_graph(), config=session_conf)
-    K.set_session(sess)
-    # for later versions:
-    # session_conf = tf.compat.v1.ConfigProto(intra_op_parallelism_threads=1, inter_op_parallelism_threads=1)
-    # sess = tf.compat.v1.Session(graph=tf.compat.v1.get_default_graph(), config=session_conf)
-    # tf.compat.v1.keras.backend.set_session(sess)
+        # 5. Configure a new global `tensorflow` session
+        # session_conf = tf.ConfigProto(
+        #     intra_op_parallelism_threads=1, inter_op_parallelism_threads=1)
+        # sess = tf.Session(graph=tf.get_default_graph(), config=session_conf)
+        # K.set_session(sess)
+        # for later versions:
+        # session_conf = tf.compat.v1.ConfigProto(intra_op_parallelism_threads=1, inter_op_parallelism_threads=1)
+        # sess = tf.compat.v1.Session(graph=tf.compat.v1.get_default_graph(), config=session_conf)
+        # tf.compat.v1.keras.backend.set_session(sess)
+    elif backend == 'tf.keras':
+        import tensorflow as tf
+        try:
+            tf.random.set_random_seed(SEED)
+        # for later versions:
+        except Exception:
+            tf.compat.v1.set_random_seed(SEED)
+        # session_conf = tf.ConfigProto(
+        #     intra_op_parallelism_threads=1, inter_op_parallelism_threads=1)
+        # sess = tf.Session(graph=tf.get_default_graph(), config=session_conf)
+        # K.set_session(sess)
+    elif backend == 'pytorch':
+        import torch
+        torch.manual_seed(SEED)
 
 
 class ModelArchSchema:
@@ -103,6 +234,7 @@ def get_initial_weights(
         model_table, model_arch, serialized_weights, warm_start=None,
         use_gpus=None, accessible_gpus_for_seg=None, mst_filter=''):
     _ = get_device_name_and_set_cuda_env(0, None)
+    import keras
     if warm_start:
         raise NotImplementedError("Warm start not implemented")
     else:
@@ -167,13 +299,16 @@ class cats(object):
     port = '5432'
     password = ''
 
+
 class cats_imagenet(cats):
     train_root = '/mnt/nfs/imagenet/train'
     valid_root = '/mnt/nfs/imagenet/valid'
 
+
 class cats_criteo(cats):
     train_root = '/mnt/nfs/hdd/criteo/npy/train'
     valid_root = '/mnt/nfs/hdd/criteo/npy/valid'
+
 
 class DBBase(object):
     def __init__(self, db_creds=cats, a_sync=0):

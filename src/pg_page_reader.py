@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-
 from collections import namedtuple
 import struct
 # import bitstruct as bitstruct
@@ -22,6 +21,8 @@ import socket
 import numpy as np
 import ctypes
 import glob
+import sys
+IS_PYTHON3 = sys.version_info.major >= 3
 HEAP_HASNULL = 0x0001
 HEAP_NATTS_MASK = 0x07FF
 TYPALIGN_INT = 'i'
@@ -94,7 +95,10 @@ def VARDATA(bytea):
 
 
 def get_1b_header(bytea):
-    return struct.unpack('@B', bytea[0:1])[0]
+    if isinstance(bytea, int):
+        return bytea
+    else:
+        return struct.unpack('@B', bytea[0:1])[0]
 
 
 def VARATT_IS_1B(bytea):
@@ -181,6 +185,8 @@ def deserialize_bytea(attname, dest_data, var_shape):
 def GET_RAWSIZE_FROM_COMPRESSED(bytea):
     return struct.unpack('@I', bytea[4:8])[0]
 
+def acc(bytea, i):
+    return bytea[i:i+1]
 
 def pglz_decompress_py(source, dest):
     varsize_source = VARSIZE(source)
@@ -530,7 +536,7 @@ def detoast(grand_bytes, df_toast, df_shape, table_name):
         va_rawsize = row['va_rawsize']
         pglz_header = bytea[:8]
         vl_len_, rawsize = struct.unpack('@ii', pglz_header)
-        assert (rawsize == va_rawsize, 'raw size does not match!')
+        assert rawsize == va_rawsize, 'raw size does not match!'
         dest_data, dest_data_size = pre_alloc_dest(
                 bytea, implementation=PGLZ_IMPLEMENTATION)
         dest_data = pglz_decompress(

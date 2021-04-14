@@ -259,7 +259,7 @@ class ImageLoader:
             for n in range(10)])
 
     def mk_temp_dir(self):
-        self.tmp_dir = '/mnt/madlib_{0}'.format(self._random_string())
+        self.tmp_dir = '/mnt/nfs/hdd/madlib_{0}'.format(self._random_string())
         os.mkdir(self.tmp_dir)
         print(("{0}: Created temporary directory {1}"\
             .format(self.pr_name, self.tmp_dir)))

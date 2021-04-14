@@ -2,7 +2,7 @@
 This is repo is for code release of our paper *Distributed Deep Learning on Data Systems: A Comparative Analysis of Approaches* for the sake of reproducibility. In the paper we developed four different approaches (Cerebro-Spark, UDAF, CTQ, and DA) of bringing deep learning to DBMS-resident data. We showed analyses and experiments to study the trade-offs of these approaches. This repo contains the data, source code, original log files, and other artifacts such as the plotting code. These are required to re-produce the results we presented in the paper.
 
 ## Prerequists
-We used [Greenplum Database](https://greenplum.org/) and [Apache Spark](https://spark.apache.org/). [Cerebro](https://github.com/ADALabUCSD/cerebro-system) is also needed. To run the experiments you will also need a GPU-enabled cluster (we used 8 nodes) with at least 150 GB RAM available on each node. 
+We used [Greenplum Database](https://greenplum.org/) and [Apache Spark](https://spark.apache.org/). [Cerebro](https://github.com/ADALabUCSD/cerebro-system) is also needed. For the tests related to Hyperopt, you will need [Hyperopt-Spark](http://hyperopt.github.io/hyperopt/). There are also some tests requiring [Pytorch DDP](https://pytorch.org/tutorials/intermediate/ddp_tutorial.html). To run the experiments you will also need a GPU-enabled cluster (we used 8 nodes) with at least 150 GB RAM available on each node. 
 
 ## Data
 
@@ -33,26 +33,37 @@ src/
   run_ctq.sh #CTQ, Imagenet
   run_da_cerebro_standalone.sh #DA, Imagenet
   run_filesystem_cerebro_standalone.sh #Cerebro-Standalone, Imagenet
-  run_spark.sh #Cerebro-Spark, Imagenet
+  run_filesystem_cerebro_spark.sh #Cerebro-Spark, Imagenet
+  run_pytorchddp.sh #PytorchDDP, Imagenet
+  run_pytorchddp_da.sh #DA-PytorchDDP, Imagenet
   run_criteo_collection.sh #All approaches, Criteo
   run_breakdown.sh #Breakdown tests, Imagenet
 ```
 - **Drill-down tests**:
 ```
 src/
-  run_scalability.sh #Scalability tests
-  hetro_simluator.ipynb #Heterogenous workloads simulations
+  run_imagenet_collection.sh #(Section Scalability) Scalability tests
+  run_imagenet_collection.sh #(Section Hetro) Heterogenous workloads tests
+  hetero_simluator.ipynb #Heterogenous workloads simulations
   run_imagenet_model_size.sh #Model size tests
+  run*_hyperopt #Hyperopt tests for various approaches
+  cloc/run_cloc.sh #LOC figures
 ```
 ### Plotters
 `plots/plots.ipynb`
 
+`src/hetero_simluator.ipynb`
+
 ### Loggers
-- **CPU logger**: logs/cpu_logger.sh
-- **GPU logger**: logs/gpu_logger.sh
+- **CPU logger**: `logs/bin/cpu_logger.sh`
+- **GPU logger**: `logs/bin/gpu_logger.sh`
+- **Disk logger**: `logs/bin/disk_logger.sh`
+- **Network logger**: `logs/bin/network_logger.sh`
+
+
 
 ### Experiment logs
-All past run logs generated during our experiments can be downloaded at [Google Drive Link](https://drive.google.com/file/d/12HxEOhEntq7wLgGQqs1_C2pG5uUraRUS/view?usp=sharing)(15.3GB). Extract them in to `logs` directory. Use these files and the plotter files you can re-produce all the test figures in the paper.
+All past run logs generated during our experiments can be downloaded at [Google Drive Link](https://drive.google.com/file/d/1w3qI8mVSvqXhqgePGg2bXKmoMpoJWDFz/view?usp=sharing)(60.5GB). Extract the contents of  `logs` into `logs` directory and contents of  `pickles` into `plots` directory. Use these files and the plotter files you can re-produce all the test figures in the paper.
 
 
 

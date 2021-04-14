@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-
 from cerebro_gpdb.pathmagic import *  # noqa
 from cerebro_gpdb.utils import DBConnect
 import os
@@ -27,7 +26,11 @@ import numpy as np
 SYS_CAT_PATH = '/mnt/nfs/sys_cat.dill'
 
 
-def input_fn(file_path):
+def input_fn(
+    file_path,
+    overwrite_table_page_path=None,
+    overwrite_toast_page_path=None
+):
     file_path_splited = os.path.split(file_path)
     mode = file_path_splited[-1]
     logs("CURRENT MODE: {}".format(mode))
@@ -44,6 +47,11 @@ def input_fn(file_path):
     toast_page_path = os.path.join(
         root_dir, str(int(sys_cat['toast_relfilenode'])))
     table_name = sys_cat['relname']
+    if overwrite_table_page_path:
+        table_page_path = overwrite_table_page_path
+    if overwrite_toast_page_path:
+        toast_page_path = overwrite_toast_page_path
+
     df_data, df_toast = table_page_read(table_page_path)
     df_actual_data = toast_page_read(
         toast_page_path, df_toast, df_shape, table_name)

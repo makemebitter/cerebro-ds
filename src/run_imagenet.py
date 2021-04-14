@@ -12,20 +12,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-
 import datetime
 import time
-from utils import DBBase
-from utils import wait
-from utils import cats
-from utils import tstamp
-from in_rdbms_helper import mst_2_str
-from in_rdbms_helper import params_fac
-from in_rdbms_helper import main_prepare
-from in_rdbms_helper import create_model_from_mst
+from cerebro_gpdb.utils import DBBase
+from cerebro_gpdb.utils import wait
+from cerebro_gpdb.utils import cats
+from cerebro_gpdb.utils import tstamp
+import os
+from cerebro_gpdb.in_rdbms_helper import mst_2_str
+from cerebro_gpdb.in_rdbms_helper import params_fac
+from cerebro_gpdb.in_rdbms_helper import main_prepare
+from cerebro_gpdb.in_rdbms_helper import create_model_from_mst
 
-from imagenetcat import MODEL_ARCH_TABLE
-
+from cerebro_gpdb.imagenetcat import MODEL_ARCH_TABLE
+# Client does not use GPU
+os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 
 class ImageNetRunner(object):
     def __init__(self, db_creds, msts, num_epochs, train_name, valid_name, no_gpu=False):
@@ -53,7 +54,7 @@ class ImageNetRunner(object):
         print("END MODEL AVERAGING: {}".format(tstamp()))
         print("END MODEL AVERAGING DUR: {}".format(total_dur))
 
-    def load_models(self, purge=True):
+    def load_models(self, msts, purge=True):
         if purge:
             print("PURGING MODEL ARCH TABLE")
             self.cursor.execute(
@@ -108,12 +109,22 @@ class ImageNetRunner(object):
 
 
 if __name__ == "__main__":
+    # parser = get_main_parser()
+    # args = parser.parse_args()
+    # set_seed(SEED)
+    # if args.drill_down_hetro:
+    #     msts = get_msts(param_grid=param_grid_hetro)
+    # else:
+    #     msts = get_msts()
+    # # random shuffling
+    # random.shuffle(msts)
+    # logs(msts)
     args, msts = main_prepare(shuffle=False)
     runner = ImageNetRunner(cats, msts, args.num_epochs,
                             args.train_name, args.valid_name, args.criteo)
     if args.load:
         print("LOADING MODELS")
-        runner.load_models()
+        runner.load_models(msts)
     if args.run:
         print("RUNNING EXPS")
         runner.run()

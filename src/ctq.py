@@ -12,29 +12,31 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-
-from utils import wait
-from utils import cats
-from utils import DBConnect
 import time
 import datetime
 import os
 import dill
-from utils import CUDA_VISIBLE_DEVICES_KEY
-from utils import get_initial_weights
-from utils import logs
-from in_rdbms_helper import main_prepare
-from in_rdbms_helper import mst_2_str
-from in_rdbms_helper import params_fac
-from in_rdbms_helper import create_model_from_mst
-from utils import set_seed
-from imagenetcat import SEED
+from cerebro_gpdb.utils import wait
+from cerebro_gpdb.utils import cats
+from cerebro_gpdb.utils import DBConnect
+from cerebro_gpdb.utils import CUDA_VISIBLE_DEVICES_KEY
+from cerebro_gpdb.utils import get_initial_weights
+from cerebro_gpdb.utils import logs
+from cerebro_gpdb.utils import set_seed
+from cerebro_gpdb.in_rdbms_helper import main_prepare
+from cerebro_gpdb.in_rdbms_helper import mst_2_str
+from cerebro_gpdb.in_rdbms_helper import params_fac
+from cerebro_gpdb.in_rdbms_helper import create_model_from_mst
+from cerebro_gpdb.imagenetcat import SEED
 import traceback
 import random
+from multiprocessing import Pool
 from multiprocessing import Process
 from multiprocessing import Manager
 from collections import defaultdict
 import numpy as np
+import itertools
+
 random.seed(SEED)
 MODULE_NAME = 'ctq'
 # Client does not use GPU
@@ -174,12 +176,12 @@ class ConcurrentTargetedQueryService(DBConnect):
         return loss, metric
 
 
-class ConcurrentTargetedQueryClient(DBConnect):
+class ConcurrentTargetedQueryClientBase(DBConnect):
     def __init__(self, db_creds, schema_madlib, msts, source_table,
                  validation_table, model_arch_table,
-                 use_gpus, epochs, models_root, logs_root=None):
+                 use_gpus, epochs, models_root, logs_root=None, shuffle=True):
         self.schema_madlib = schema_madlib
-        super(ConcurrentTargetedQueryClient, self).__init__(db_creds)
+        super(ConcurrentTargetedQueryClientBase, self).__init__(db_creds)
         self.db_creds = db_creds
         self.msts = msts
         self.use_gpus = use_gpus
@@ -190,8 +192,43 @@ class ConcurrentTargetedQueryClient(DBConnect):
         self.validation_table = validation_table
         self.models_root = models_root
         self.logs_root = logs_root
+        self.shuffle = shuffle
         if CUDA_VISIBLE_DEVICES_KEY in os.environ:
             self.original_cuda_env = os.environ[CUDA_VISIBLE_DEVICES_KEY]
+
+
+# def map_fn(shm_objs, i, mst):
+#     models_root, model_dirs, return_dict_model, model_configs = shm_objs
+#     model_key, \
+#         model_arch, \
+#         compile_params, \
+#         fit_params, \
+#         serialized_weights = self.mst_to_model(mst)
+#     model_key = '{}_{}'.format(i, model_key)
+
+#     serialized_weights_dir = os.path.join(models_root, model_key)
+#     with open(serialized_weights_dir, 'wb') as f:
+#         f.write(serialized_weights)
+#     model_dirs[model_key] = serialized_weights_dir
+#     return_dict_model[model_key] = serialized_weights
+#     model_configs[
+#         model_key] = model_arch, compile_params, fit_params
+#     return model_key
+
+
+# def map_fn_star(self, row_tuple):
+#     i, mst = row_tuple
+#     return map_fn(self, i, mst)
+
+
+class ConcurrentTargetedQueryClient(ConcurrentTargetedQueryClientBase):
+    def __init__(self, db_creds, schema_madlib, msts, source_table,
+                 validation_table, model_arch_table,
+                 use_gpus, epochs, models_root, logs_root=None, shuffle=True):
+        super(ConcurrentTargetedQueryClient, self).__init__(
+            db_creds, schema_madlib, msts, source_table,
+            validation_table, model_arch_table,
+            use_gpus, epochs, models_root, logs_root, shuffle)
 
         self.mst_catlog = {}
         self.init_catlogs()
@@ -203,15 +240,17 @@ class ConcurrentTargetedQueryClient(DBConnect):
         self.model_info_ordered = defaultdict(list)
         self.return_dict_model = self.manager.dict()
         self.return_dict_grand = {}
-        self.model_dirs = {}
-        self.model_configs = {}
+        self.model_dirs = self.manager.dict()
+        self.model_configs = self.manager.dict()
+        self.model_keys = self.manager.list()
 
     def init_epoch(self):
         self.return_dict_job = self.manager.dict()
         self.procs = {}
         self.model_dist_pairs = [(i, j) for i in self.model_keys
                                  for j in self.dist_keys]
-        random.shuffle(self.model_dist_pairs)
+        if self.shuffle:
+            random.shuffle(self.model_dist_pairs)
         self.model_states = {i: False for i in self.model_keys}
         self.dist_states = {i: False for i in self.dist_keys}
         self.model_on_dist = {dist_key: -1 for dist_key in self.dist_keys}
@@ -237,6 +276,7 @@ class ConcurrentTargetedQueryClient(DBConnect):
                     dill.dump(self.model_info_ordered, f)
                 with open(jobs_info_filepath, "wb") as f:
                     dill.dump(self.return_dict_grand, f)
+        return self.model_info_ordered, self.return_dict_grand
 
     def init_catlogs(self):
 
@@ -276,21 +316,63 @@ class ConcurrentTargetedQueryClient(DBConnect):
         return model_key, \
             model_arch, compile_params, fit_params, serialized_weights
 
+    def load_msts_map_fn(self, i, mst):
+        import tensorflow as tf
+        os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+        tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
+        model_key, \
+            model_arch, \
+            compile_params, \
+            fit_params, \
+            serialized_weights = self.mst_to_model(mst)
+        model_key = '{}_{}'.format(i, model_key)
+
+        serialized_weights_dir = os.path.join(self.models_root, model_key)
+        with open(serialized_weights_dir, 'wb') as f:
+            f.write(serialized_weights)
+        self.model_dirs[model_key] = serialized_weights_dir
+        self.return_dict_model[model_key] = serialized_weights
+        self.model_configs[
+            model_key] = model_arch, compile_params, fit_params
+        self.model_keys.append(model_key)
+
     def load_msts(self):
-        for mst in self.msts:
-            model_key, \
-                model_arch, \
-                compile_params, \
-                fit_params, \
-                serialized_weights = self.mst_to_model(mst)
-            self.return_dict_model[model_key] = serialized_weights
-            serialized_weights_dir = os.path.join(self.models_root, model_key)
-            self.model_dirs[model_key] = serialized_weights_dir
-            with open(serialized_weights_dir, 'wb') as f:
-                f.write(serialized_weights)
-            self.model_keys.append(model_key)
-            self.model_configs[
-                model_key] = model_arch, compile_params, fit_params
+        # def map_fn(i, mst):
+        #     model_key, \
+        #         model_arch, \
+        #         compile_params, \
+        #         fit_params, \
+        #         serialized_weights = self.mst_to_model(mst)
+        #     model_key = '{}_{}'.format(i, model_key)
+
+        #     serialized_weights_dir = os.path.join(self.models_root, model_key)
+        #     with open(serialized_weights_dir, 'wb') as f:
+        #         f.write(serialized_weights)
+        #     self.model_dirs[model_key] = serialized_weights_dir
+        #     self.return_dict_model[model_key] = serialized_weights
+        #     self.model_configs[
+        #         model_key] = model_arch, compile_params, fit_params
+        #     return model_key
+
+        # pool = Pool()
+        # shm_objs =
+        # self.model_keys = pool.imap_unordered(
+        #     map_fn_star, zip(itertools.repeat(self), enumerate(self.msts)))
+        # self.model_keys = sorted(self.model_keys)
+        processes = []
+        for i, mst in enumerate(self.msts):
+            proc = Process(target=self.load_msts_map_fn,
+                           args=[
+                               i, mst
+                           ])
+            processes.append(proc)
+            proc.start()
+        for proc in processes:
+            proc.join()
+        self.model_keys = sorted(list(self.model_keys))
+        self.model_dirs = dict(self.model_dirs)
+        self.return_dict_model = dict(self.return_dict_model)
+        self.model_configs = dict(self.model_configs)
 
     def train_on_worker(self,
                         dist_key,
@@ -325,7 +407,7 @@ class ConcurrentTargetedQueryClient(DBConnect):
             train_end = time.time()
             loss_valid, metric_valid = ctq.valid(on_train=False)
             valid_end = time.time()
-            
+
         except Exception:
             failed = True
             traceback.print_exc()
@@ -448,6 +530,3 @@ if __name__ == '__main__':
         summary = get_summary(ctq_client.model_info_ordered)
         print(summary)
         logs("END RUNNING")
-
-
-

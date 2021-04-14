@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-
 import sys
 from math import ceil
 import argparse
@@ -25,12 +24,12 @@ from utils import DBBase
 from utils import cats_imagenet as cats
 
 
-
 TOAST_LIMIT_BYTES = 1073741824
 ONE_IMAGE_BYTES = 112 * 112 * 3 * 4
 
 VALID_BUFFER_SIZE = int(ceil(50000 / 16))
 TRAIN_BUFFER_SIZE = 3210
+SEGMENTS_TO_USE = 'segments_to_use'
 
 # sys.path.insert(0, '/home/gpadmin/.local/lib/python3.5/site-packages/')
 print(sys.path)
@@ -39,6 +38,7 @@ try:
     sys.path.remove('/usr/local/gpdb/lib/python')
 except Exception:
     pass
+
 
 def get_all(fdir, ext='h5'):
     return sorted(glob.glob(os.path.join(fdir, '*.{}'.format(ext))))
@@ -49,13 +49,19 @@ class Loader(DBBase):
         self,
         db_creds,
         num_workers=1,
-        pack_to_one=False,
+        size_scalability=None,
         train_buffer_size=None
     ):
         super(Loader, self).__init__(db_creds)
         self.iloader = ImageLoader(num_workers=num_workers, db_creds=db_creds)
-        self.pack_to_one = pack_to_one
+        self.size_scalability = size_scalability
         self.train_buffer_size = train_buffer_size
+        self.segment_list_limit_offset_map = {
+            1: (1, 0),
+            2: (2, 1),
+            4: (4, 3),
+            6: (6, 2)
+        }
 
     def get_data_label(self, file_path):
         raise NotImplementedError()
@@ -77,22 +83,33 @@ class Loader(DBBase):
             self.load_one(file_path, name, True)
 
     def create_binding(self):
+        segments_to_use = SEGMENTS_TO_USE
         self.cursor.execute("""
             DROP TABLE IF EXISTS host_gpu_mapping_tf;
             SELECT * FROM madlib.gpu_configuration('host_gpu_mapping_tf');
             SELECT * FROM host_gpu_mapping_tf ORDER BY hostname, gpu_descr;
-            DROP TABLE IF EXISTS segments_to_use;
-            CREATE TABLE segments_to_use AS
+            DROP TABLE IF EXISTS {segments_to_use};
+            CREATE TABLE {segments_to_use} AS
                 SELECT DISTINCT dbid, hostname 
                 FROM gp_segment_configuration JOIN host_gpu_mapping_tf USING (hostname)
                 WHERE role='p' AND content>=0;
             """.format(**locals())
         )
+        if self.size_scalability is not None:
+            limit, offset = self.segment_list_limit_offset_map[
+                self.size_scalability]
+            self.cursor.execute("""
+            DROP TABLE IF EXISTS {self.segments_to_use};
+            CREATE TABLE {self.segments_to_use} AS
+                select * from {segments_to_use} order by (dbid) limit {limit} offset {offset};
+            """.format(**locals())
+            )
 
     def get_pack_name(self, name):
-        if self.pack_to_one:
-            name_packed = name + 'packed_1'
-            name_packed_summary = name_packed + 'summary_1'
+        if self.size_scalability is not None:
+            name_packed = name + '_packed_{}'.format(self.size_scalability)
+            name_packed_summary = name_packed + \
+                '_summary'
         else:
             name_packed = name + '_packed'
             name_packed_summary = name_packed + '_summary'
@@ -116,7 +133,7 @@ class Loader(DBBase):
             ); """.format(**locals())
         print(sql_query)
         self.cursor.execute(sql_query)
-    
+
     def pack_valid(self, name, train_packed_name):
         name_packed, name_packed_summary = self.get_pack_name(name)
         function = 'validation_preprocessor_dl'
@@ -148,17 +165,23 @@ class ImageNetLoader(Loader):
         self,
         db_creds,
         num_workers=1,
-        pack_to_one=False,
+        size_scalability=None,
         train_buffer_size=TRAIN_BUFFER_SIZE,
         no_gpu=False
     ):
         super(ImageNetLoader, self).__init__(
-            db_creds, num_workers, pack_to_one, train_buffer_size)
+            db_creds,
+            num_workers=num_workers,
+            size_scalability=size_scalability,
+            train_buffer_size=train_buffer_size)
         if no_gpu:
             self.segments_to_use = 'all_segments'
         else:
-            self.segments_to_use = 'segments_to_use_1' if \
-                self.pack_to_one else 'segments_to_use'
+            if size_scalability is not None:
+                self.segments_to_use = '{}_{}'.format(
+                    SEGMENTS_TO_USE, size_scalability)
+            else:
+                self.segments_to_use = SEGMENTS_TO_USE
 
     def get_data_label(self, file_path):
         h5f = h5py.File(file_path, 'r')
@@ -176,7 +199,7 @@ def loader_args():
         '--pack', action='store_true'
     )
     parser.add_argument(
-        '--pack_to_one', action='store_true'
+        '--size_scalability', type=int, default=None
     )
     parser.add_argument(
         '--no_gpu', action='store_true'
@@ -189,10 +212,12 @@ def loader_args():
                              password=cats.password)
     return args, db_creds
 
+
 if __name__ == "__main__":
     args, db_creds = loader_args()
     imagenet_loader = ImageNetLoader(
-        db_creds, 16, pack_to_one=args.pack_to_one, no_gpu=args.no_gpu)
+        db_creds, 16, size_scalability=args.size_scalability,
+        no_gpu=args.no_gpu)
 
     name_list = ['imagenet_train_data', 'imagenet_valid_data']
     purpose_list = ['train', 'valid']

@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-
 import os
 import argparse
 import tensorflow as tf
@@ -34,17 +33,15 @@ import resnet50tfk
 import vgg16tfk
 import dill
 from imagenetcat import param_grid
+from cerebro_gpdb.imagenetcat import spark_imagenet_cat
+from cerebro_gpdb.cerebro_spark_wrapper import CerebroSparkImageNetBase
 from utils import logs
 
 os.environ["PYSPARK_PYTHON"] = "/mnt/py3v/bin/python"
 os.environ["PYSPARK_DRIVER_PYTHON"] = "/mnt/py3v/bin/python"
 
 
-class spark_imagenet_cat:
-    valid_list = [
-        "hdfs://master:9000/imagenet_parquet/valid/valid_{}.parquet".format(i) for i in range(8)]
-    train_list = [
-        "hdfs://master:9000/imagenet_parquet/train/train_{}.parquet".format(i) for i in range(8)]
+
 
 
 # For sanity checks
@@ -133,29 +130,9 @@ def estimator_gen_fn(params):
     return keras_estimator
 
 
-class CerebroSparkImageNet(object):
-    def __init__(self, num_workers):
-        self.spark = SparkSession \
-            .builder \
-            .master("spark://10.10.1.1:7077") \
-            .config('spark.python.worker.memory', "100G")\
-            .config("spark.executor.memory", "100G")\
-            .config("spark.executor.cores", "1")\
-            .config("spark.pyspark.python", "/mnt/py3v/bin/python")\
-            .config("spark.executorEnv.HADOOP_HOME", "/local/hadoop")\
-            .config("spark.executorEnv.ARROW_LIBHDFS_DIR", "/local/hadoop/lib/native/")\
-            .appName("CerebroSparkImageNet") \
-            .getOrCreate()
-        self.num_workers = num_workers
-        self.backend = SparkBackend(spark_context=self.spark.sparkContext,
-                                    num_workers=num_workers,
-                                    disk_cache_size=100,
-                                    start_timeout=60000000,
-                                    verbose=2,
-                                    nics=['enp94s0f0'],
-                                    data_readers_pool_type='process', num_data_readers=10)
-        self.store = HDFSStore('hdfs://master:9000/tmp')
-
+# defined only for back-compatibility.
+# Use cerebro_spark_wrapper.CerebroSparkImageNet instead
+class CerebroSparkImageNet(CerebroSparkImageNetBase):
     def run(self, spark_imagenet_cat, epoch=10, prepared=False):
         if prepared:
             logs("Skipping data loading")
@@ -180,40 +157,15 @@ class CerebroSparkImageNet(object):
             logs("Skipping data preparing")
         else:
             logs("Starting data preparing")
-            self.backend.prepare_data(self.store, df, validation='validation', feature_columns=[
-                                    'features'], label_columns=['labels'])
+            self.backend.prepare_data(
+                self.store, df, validation='validation', feature_columns=[
+                    'features'], label_columns=['labels'])
             logs("Ending data preparing")
-        
+
         logs("Starting training")
         model = self.grid_search.fit_on_prepared_data()
         logs("Ending training")
         return model
-
-    def load(self, spark_imagenet_cat):
-        for i, path in enumerate(spark_imagenet_cat.valid_list):
-            if i == 0:
-                df = self.load_one(path, 1)
-            else:
-                df_new = self.load_one(path, 1)
-                df = df.union(df_new)
-        for i, path in enumerate(spark_imagenet_cat.train_list):
-            df_new = self.load_one(path, 0)
-            df = df.union(df_new)
-        df = df.repartition(self.num_workers)
-        arr_to_vector_udf = udf(lambda l: Vectors.dense(l), VectorUDT())
-        df = df.select(
-            arr_to_vector_udf(df["labels"]).alias("labels"),
-            arr_to_vector_udf(df["features"]).alias("features"),
-            df["validation"])
-        return df
-
-    def load_one(self, path, validation):
-        df = self.spark.read.format("parquet").load(path)
-        df = df.withColumn("features", df['features'].cast("array<float>")).\
-            withColumn("labels", df['labels'].cast("array<float>"))
-        df = df.withColumn("validation", F.lit(validation))
-        return df
-
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
