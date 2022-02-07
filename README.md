@@ -13,7 +13,7 @@ The source code includes the actual implementation of the different appraoches, 
 ### Implementations
 - **Cerebro-Spark**: For this approach please refer to [Cerebro-Spark](https://github.com/ADALabUCSD/cerebro-system).
 
-- **User Defined Aggregate Functions (UDAF)**: This approach has been incorporated into [Apache MADlib](https://github.com/apache/madlib) and released there.
+- **User Defined Aggregate Functions (UDAF)**: This approach has been incorporated into [Apache MADlib](https://github.com/apache/madlib) and released there. To reproduce the experiments in this repo, use my [Fork of MADlib](https://github.com/makemebitter/madlib/tree/cerebro).
 - **Concurrent Targeted Queries (CTQ)**: This approache has two components, the in-DB part can be found and installed from my [Fork of MADlib](https://github.com/makemebitter/madlib/tree/cerebro). The other part is at `src/ctq.py`.
 - **Direct Access (DA)**: This approache can be found in `src/da.py`.
 
