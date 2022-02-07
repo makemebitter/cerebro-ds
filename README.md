@@ -67,3 +67,24 @@ All past run logs generated during our experiments can be downloaded at [Google 
 
 
 
+### Cite this work
+```
+@article{DBLP:journals/pvldb/ZhangMJKKKVK21,
+  author    = {Yuhao Zhang and
+               Frank Mcquillan and
+               Nandish Jayaram and
+               Nikhil Kak and
+               Ekta Khanna and
+               Orhan Kislal and
+               Domino Valdano and
+               Arun Kumar},
+  title     = {Distributed Deep Learning on Data Systems: {A} Comparative Analysis
+               of Approaches},
+  journal   = {Proc. {VLDB} Endow.},
+  volume    = {14},
+  number    = {10},
+  pages     = {1769--1782},
+  year      = {2021}
+}
+```
+
