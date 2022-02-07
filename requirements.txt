@@ -1,0 +1,16 @@
+
+psycopg2-binary==2.8.6
+grpcio==1.26.0
+Pillow==7.1.1
+pandas==0.25.3
+matplotlib==3.0.3
+dill
+bitstruct
+image-classifiers
+numpy==1.16.0
+h5py==2.9.0
+Scipy==1.2.1
+Keras==2.2.5
+hyperopt==0.2.4
+grpcio==1.26.0
+tensorflow-gpu==1.14
