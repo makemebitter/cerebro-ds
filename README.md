@@ -6,7 +6,7 @@ We used [Greenplum Database](https://greenplum.org/) and [Apache Spark](https://
 
 **Notes on Python version and MADlib**: all scripts in this repo are written in Python 3.7. However, to use the UDAF or CTQ approach, you will need to build and install Apache MADlib, which does not support Python 3 yet. Therefore you will need to keep a Python 2.7 for Greenplum/MADlib, and a Python 3.7 for scripts in this repo. The common dependencies between two Python versions (although certain libraries are not needed by MADlib) can be found [here](https://github.com/makemebitter/cerebro-ds/blob/master/requirements.txt). There are also some dependencies exclusive to Python 3.7 [here](https://github.com/makemebitter/cerebro-ds/blob/master/requirements_extra.txt).
 
-Apart from the dependencies above, you also need to have GPDB 5.27 (for UDAF and CTQ), Spark 2.4.5 (for Cerebro-Spark), Cerebro 1.0.0 (for Cerebro-Spark and DA), TensorFlow 1.14.0 (for all), PyTorch 1.4.0 (for certain experiments), CUDA 10.0, cuDNN 7.4. Please refer to their own installation guides.
+Apart from the dependencies above, you also need to have GPDB 5.27 (for UDAF and CTQ), Spark 2.4.5 (for Cerebro-Spark), Cerebro 1.0.0 (for Cerebro-Spark and DA, install in Python 3.7 only), TensorFlow 1.14.0 (for all approaches, and should be installed in both Python 2.7 and Python 3.7), PyTorch 1.4.0 (for certain experiments and install in Python 3.7 only), CUDA 10.0, cuDNN 7.4. Please refer to their own installation guides.
 
 ## Data
 
