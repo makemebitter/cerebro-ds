@@ -70,6 +70,9 @@ All past run logs generated during our experiments can be downloaded at [Google 
 
 
 ### Cite this work
+
+Paper: [URL](https://adalabucsd.github.io/papers/2021_Cerebro-DS.pdf)
+
 ```
 @article{DBLP:journals/pvldb/ZhangMJKKKVK21,
   author    = {Yuhao Zhang and
